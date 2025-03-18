@@ -4,7 +4,7 @@ from PIL import Image
 import os
 import numpy as np
 from scipy import signal
-
+import time
 # Fonction pour doubler la taille d'une image sans trop la pixeliser
 def double_size(image):
     # On charge l'image
@@ -34,8 +34,11 @@ def double_size(image):
     return Image.fromarray(sharpen_image, 'HSV').convert('RGB')
 
 path = "datas/"
-image = path+"paysage.jpg"
+image = path+"paysageResized.jpg"
+start = time.time()
 doubled_image = double_size(image)
+end = time.time()
 # On sauvegarde l'image modifiée
 doubled_image.save("sorties/paysage_double.jpg")
+print(f"Temps d'exécution : {end-start}")
 print("Image sauvegardée")

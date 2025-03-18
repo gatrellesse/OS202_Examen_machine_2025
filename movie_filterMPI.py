@@ -5,8 +5,13 @@ from PIL import Image
 import os
 import numpy as np
 from scipy import signal
+from mpi4py import MPI
 import time
 
+# MPI initialisation
+comm = MPI.COMM_WORLD
+rank = comm.Get_rank()
+size = comm.Get_size()
 
 # Fonction pour appliquer un filtre de netteté à une image
 def apply_filter(image):
@@ -43,20 +48,49 @@ path = "datas/perroquets/"
 if not os.path.exists("sorties/perroquets"):
     os.makedirs("sorties/perroquets")
 out_path = "sorties/perroquets/"
-start = time.time()
 
 output_images = []
-for i in range(37):
-    image = path + "Perroquet{:04d}.jpg".format(i+1)
-    sharpen_image = apply_filter(image)
-    # On sauvegarde l'image modifiée
-    output_images.append(sharpen_image)
-    print(f"Image {i+1} traitée")
-print("Traitement terminé")
 
-# On sauvegarde les images modifiées
-for i, img in enumerate(output_images):
-    img.save(out_path + "Perroquet{:04d}.jpg".format(i+1))
-print("Images sauvegardées")
-end = time.time()
-print("Time used: ", start - end)
+# Nombre total d'images
+num_images = 37
+
+images_per_process = num_images // size
+start = rank * images_per_process
+end = num_images if rank == size - 1 else start + images_per_process
+
+
+# Distribuer les images aux processus
+images_per_process = num_images // size
+remainder = num_images % size # Nombre d'images restantes
+
+# Chaque processus traite une partie des images
+start_index = rank * images_per_process + min(rank, remainder)
+end_index = start_index + images_per_process + (1 if rank < remainder else 0)
+
+# Liste pour stocker les images traitées
+output_images = []
+start = time.time()
+# Traitement des images attribuées à ce processus
+for i in range(start_index, end_index):
+    image = path + "Perroquet{:04d}.jpg".format(i + 1)
+    sharpen_image = apply_filter(image)
+    output_images.append((i, sharpen_image))
+    print(f"Process {rank}: Image {i + 1} traitée")
+
+# Collecter les résultats sur le processus maître
+gathered_output = comm.gather(output_images, root=0)
+
+# Sauvegarder les images sur le processus maître
+if rank == 0:
+    # Fusionner les résultats de tous les processus
+    all_output_images = []
+    for output in gathered_output:
+        all_output_images.extend(output)
+    # Trier les images par index
+    all_output_images.sort(key=lambda x: x[0])
+    # Sauvegarder les images
+    for idx, img in all_output_images:
+        img.save(out_path + "Perroquet{:04d}.jpg".format(idx + 1))
+    print("Toutes les images ont été sauvegardées.")
+    end = time.time()
+    print("Time used: ", end - start)
